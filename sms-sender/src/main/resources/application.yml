@@ -1,0 +1,42 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: sms-sender
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        spring.json.trusted.packages: "*"
+
+# Application specific config
+app:
+  kafka:
+    topic:
+      sms-events: sms-events
+
+  redis:
+    blocked-users-key: "blocked:users"
+
+  sms:
+    mock-success-rate: 0.9   # 90% success rate for mock vendor
+
+logging:
+  level:
+    com.sms.sender: DEBUG
+    org.springframework.kafka: INFO
