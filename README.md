@@ -34,50 +34,168 @@ Client
 
 ## Prerequisites
 
-- Docker & Docker Compose
-- (Optional for local dev) Java 17+, Maven 3.9+, Go 1.21+, Redis CLI
+- **Docker Desktop** — [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+- (Optional, for local dev without Docker) Java 17+, Maven 3.9+, Go 1.21+
 
 ---
 
-## Running with Docker Compose
+## How to Run the Project
+
+### Step 1 — Download and extract the ZIP
+
+Unzip `sms-service.zip`. You will get a folder called `sms-service/`. Inside it there is another `sms-service/` folder — that inner one is where you need to be.
+
+```
+sms-service.zip
+└── sms-service/
+    └── sms-service/        ← work from here
+        ├── docker-compose.yml
+        ├── sms-sender/
+        └── sms-store/
+```
+
+### Step 2 — Open a terminal in the right folder
+
+**Windows (PowerShell):**
+```powershell
+cd C:\path\to\sms-service\sms-service
+```
+
+**Mac / Linux:**
+```bash
+cd /path/to/sms-service/sms-service
+```
+
+Confirm you are in the right place — you must see `docker-compose.yml` in the listing:
+```bash
+ls        # Mac/Linux
+dir       # Windows PowerShell
+```
+
+### Step 3 — Start all services
 
 ```bash
-# Clone / enter the repo root
-cd sms-service
-
-# Build and start everything
 docker compose up --build
+```
 
-# Services will be available once healthy:
-#   SMS Sender  → http://localhost:8080
-#   SMS Store   → http://localhost:8081
-#   Kafka       → localhost:9092
-#   Redis       → localhost:6379
-#   MongoDB     → localhost:27017
+This single command will:
+- Pull all required Docker images (Kafka, Zookeeper, Redis, MongoDB)
+- Build the Java SMS Sender image (~3–5 min on first run)
+- Build the Go SMS Store image (~2 min on first run)
+- Start all 6 containers
+
+**Wait until you see these lines in the logs:**
+```
+sms-sender  | Started SmsSenderApplication in X.X seconds
+sms-store   | [main] SMS Store listening on :8081
+sms-store   | [kafka] Consumer starting: topic=sms-events
+```
+
+> MongoDB will continuously print checkpoint messages — that is completely normal, ignore them.
+
+### Step 4 — Verify everything is running
+
+Open a **second terminal** and run:
+
+```bash
+curl http://localhost:8080/v1/sms/health
+curl http://localhost:8081/health
+```
+
+Both should return `{"status":"UP"}`.
+
+> **Windows PowerShell note:** Use `Invoke-WebRequest` instead of `curl`:
+> ```powershell
+> Invoke-WebRequest -Uri http://localhost:8080/v1/sms/health | Select-Object -ExpandProperty Content
+> Invoke-WebRequest -Uri http://localhost:8081/health | Select-Object -ExpandProperty Content
+> ```
+
+### Step 5 — Send your first SMS
+
+**Mac / Linux / Git Bash:**
+```bash
+curl -X POST http://localhost:8080/v1/sms/send \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"user-123","phoneNumber":"+919876543210","message":"Hello from SMS service!"}'
+```
+
+**Windows PowerShell:**
+```powershell
+Invoke-WebRequest -Uri http://localhost:8080/v1/sms/send `
+  -Method POST `
+  -Headers @{"Content-Type"="application/json"} `
+  -Body '{"userId":"user-123","phoneNumber":"+919876543210","message":"Hello from SMS service!"}' |
+  Select-Object -ExpandProperty Content
+```
+
+Expected response:
+```json
+{
+  "messageId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "status": "SUCCESS",
+  "userId": "user-123",
+  "phoneNumber": "+919876543210",
+  "errorMessage": null,
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+> The status will be randomly `SUCCESS` or `FAILED` (90/10 split) to simulate a real vendor.
+
+### Step 6 — Check SMS history
+
+Wait 2–3 seconds for Kafka to deliver the event, then:
+
+**Mac / Linux / Git Bash:**
+```bash
+curl http://localhost:8081/v1/user/user-123/messages
+```
+
+**Windows PowerShell:**
+```powershell
+Invoke-WebRequest -Uri http://localhost:8081/v1/user/user-123/messages |
+  Select-Object -ExpandProperty Content
+```
+
+You will see the stored SMS record retrieved from MongoDB.
+
+### Step 7 — Test the block list
+
+```bash
+# Block a user (runs redis-cli inside the Redis container)
+docker exec redis redis-cli SADD blocked:users user-123
+
+# Try sending — response will have status: BLOCKED
+curl -X POST http://localhost:8080/v1/sms/send \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"user-123","phoneNumber":"+919876543210","message":"Test"}'
+
+# Unblock the user
+docker exec redis redis-cli SREM blocked:users user-123
+```
+
+### Step 8 — Shut down
+
+```bash
+# Stop all containers
+docker compose down
+
+# Stop and also wipe stored MongoDB data
+docker compose down -v
 ```
 
 ---
 
-## Running Locally (without Docker)
+## Troubleshooting
 
-### Infrastructure (still via Docker)
-```bash
-docker compose up zookeeper kafka redis mongodb
-```
-
-### SMS Sender (Java)
-```bash
-cd sms-sender
-mvn spring-boot:run
-# Listens on :8080
-```
-
-### SMS Store (Go)
-```bash
-cd sms-store
-go run ./cmd/server
-# Listens on :8081
-```
+| Problem | Fix |
+|---------|-----|
+| `docker compose` not found | Try `docker-compose` (with hyphen) — older Docker versions use this |
+| Port 8080 or 8081 already in use | Stop whatever is using that port, or change port mapping in `docker-compose.yml` |
+| SMS Sender can't connect to Kafka at startup | Kafka takes ~30 sec to be ready; Spring Boot retries automatically — just wait |
+| `curl` not working on Windows | Use `Invoke-WebRequest` as shown above, or install Git Bash |
+| `version` attribute warning in docker-compose | Safe to ignore — it is just an obsolete field warning |
+| MongoDB flooding logs with checkpoint messages | Normal behaviour — ignore it |
 
 ---
 
@@ -104,29 +222,9 @@ Send an SMS to a user.
 | 403 | `BLOCKED` | User is on the Redis block list |
 | 502 | `FAILED` | Mock vendor returned a failure |
 
-**Example — success:**
-```bash
-curl -X POST http://localhost:8080/v1/sms/send \
-  -H "Content-Type: application/json" \
-  -d '{"userId":"user-123","phoneNumber":"+919876543210","message":"Hello!"}'
-```
-
-```json
-{
-  "messageId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "status": "SUCCESS",
-  "userId": "user-123",
-  "phoneNumber": "+919876543210",
-  "errorMessage": null,
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
 ---
 
 ### SMS Sender — `GET /v1/sms/health`
-
-Health check.
 
 ```bash
 curl http://localhost:8080/v1/sms/health
@@ -176,37 +274,38 @@ curl http://localhost:8081/health
 
 ## Block List Management
 
-The block list is a Redis Set at key `blocked:users`.
+The block list is a Redis Set at key `blocked:users`. Use Docker exec since Redis runs inside a container:
 
 ```bash
 # Block a user
-redis-cli SADD blocked:users user-123
+docker exec redis redis-cli SADD blocked:users user-123
 
 # Unblock a user
-redis-cli SREM blocked:users user-123
+docker exec redis redis-cli SREM blocked:users user-123
 
 # List all blocked users
-redis-cli SMEMBERS blocked:users
+docker exec redis redis-cli SMEMBERS blocked:users
 ```
 
 ---
 
-## End-to-End Demo
+## End-to-End Demo Script
+
+On Mac/Linux or Git Bash on Windows:
 
 ```bash
-# Make sure all services are running first
 bash demo.sh
 ```
 
-The script:
+The script automatically:
 1. Checks health of both services
 2. Sends a successful SMS for `user-demo-001`
 3. Blocks `user-blocked-999` via Redis
 4. Attempts to send to the blocked user (receives `BLOCKED`)
 5. Sends a second SMS for `user-demo-001`
-6. Waits for the Kafka consumer to store events
+6. Waits for Kafka consumer to store events
 7. Retrieves message history for `user-demo-001` from the SMS Store
-8. Retrieves history for the blocked user (the BLOCKED event is stored)
+8. Retrieves history for the blocked user (the BLOCKED event is also stored)
 9. Unblocks the user
 
 ---
