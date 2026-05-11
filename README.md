@@ -406,3 +406,36 @@ sms-service/
 | `KAFKA_BROKERS` | `localhost:9092` | Kafka brokers (comma-separated) |
 | `KAFKA_TOPIC` | `sms-events` | Topic to consume |
 | `KAFKA_GROUP_ID` | `sms-store-group` | Consumer group ID |
+
+---
+
+## What I Learned
+
+I was given this project as an assignment to refactor a monolithic SMS service into two separate microservices — one in Java and one in Go. Honestly, at the start I didn't fully understand why you would split one working service into two, or why you'd bring in Kafka just to pass data between them. By the end, it started making a lot more sense.
+
+### Microservices — why split things up?
+Before this I thought microservices were just a fancy way of complicating things. But working through this made me understand the real reason — each service has one job. The Java service only cares about receiving the request, checking if the user is blocked, and calling the vendor. The Go service only cares about storing and retrieving messages. If one goes down, the other can still function. That separation felt theoretical before, but actually building it made it click.
+
+### Kafka — I didn't get it at first
+Kafka was the most confusing part initially. My first instinct was — why not just have the Java service call the Go service directly over HTTP? It would be simpler. But I slowly understood the point — if the Go service is slow or temporarily down, the Java service shouldn't have to wait or fail. Kafka sits in the middle and holds the message until the Go service is ready. The Java service publishes and moves on. That async decoupling is something I'll remember.
+
+### Redis for the block list
+This one was straightforward but satisfying. Instead of hitting a database on every single SMS request just to check if a user is blocked, we keep that list in Redis which lives in memory and responds in microseconds. I also learned about "failing open" — if Redis itself goes down, we let the request through rather than blocking all SMS sending. That's a deliberate design decision, not laziness.
+
+### MongoDB
+I had used databases before but always relational ones. Working with MongoDB here showed me how you think differently — you design your document around how you'll query it, not around normalisation rules. Creating indexes (compound index on userId + sentAt for history queries, unique index on messageId to prevent duplicates) also made me realise that schema design and performance go hand in hand even in NoSQL.
+
+### Docker — from confusing to actually useful
+I had seen Dockerfiles before but never really understood them. Writing multi-stage builds for both services — one stage to build, a smaller one to run — and then wiring everything together in docker-compose.yml gave me a real appreciation for what Docker actually solves. I also spent a good amount of time debugging build errors (the missing go.sum file being a good example) which taught me more than any tutorial would have.
+
+### Go — a new language mid-project
+I had never written Go before this. The standard library HTTP server, the explicit error handling, the interface-based design — it's very different from Java. What I liked is that Go forces you to be deliberate. There's no magic, no framework doing things behind the scenes. You write a handler, you register it, you handle errors explicitly. It felt verbose at first but I understand now why Go codebases tend to be readable.
+
+### Spring Boot — more than just annotations
+I knew Spring Boot at a surface level — put an annotation, it works. This project made me go deeper into how Kafka producers are configured (idempotence, acks=all, retries), how RedisTemplate works, and how to write a proper global exception handler so validation errors return clean JSON instead of a stack trace.
+
+### Testing — actually writing them, not just knowing they exist
+I knew unit testing was important. This project made me actually write them. Mocking dependencies in Java with Mockito, and using a stub repository in Go to test the service layer without needing a real MongoDB running — these taught me that good code is code that can be tested in isolation. The Repository interface in Go exists purely to make testing possible, and that's a legitimate architectural decision.
+
+### The thing that surprised me most
+The hardest part wasn't the code. It was understanding *why* each decision was made — why Kafka instead of HTTP, why Redis instead of a database, why fail open, why async. The code is just the expression of those decisions. That's probably the most valuable thing I'm taking away from this.
