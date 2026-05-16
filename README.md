@@ -74,6 +74,8 @@ dir       # Windows PowerShell
 
 ### Step 3 — Start all services
 
+> **Before running this command, make sure Docker Desktop is open and running.** You should see the Docker whale icon in your taskbar (Windows) or menu bar (Mac). If it is not running, open it and wait until it shows "Docker Desktop is running" before continuing. If Docker is not running, the command below will fail with a `Cannot connect to the Docker daemon` error.
+
 ```bash
 docker compose up --build
 ```
