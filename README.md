@@ -424,6 +424,20 @@ sms-service/
 | `KAFKA_TOPIC` | `sms-events` | Topic to consume |
 | `KAFKA_GROUP_ID` | `sms-store-group` | Consumer group ID |
 
+### Result of running the Script
+
+<img width="974" height="1010" alt="image" src="https://github.com/user-attachments/assets/8ef7babf-1884-4117-9eca-1af3d9e3a0b1" />
+<img width="975" height="1105" alt="image" src="https://github.com/user-attachments/assets/5abe379c-34cf-4f99-8ca1-0251f8d281e3" />
+<img width="958" height="1225" alt="image" src="https://github.com/user-attachments/assets/b2d179ea-14e5-4074-bd7b-18e9ee18cf2d" />
+<img width="740" height="1229" alt="image" src="https://github.com/user-attachments/assets/be360b8f-0beb-4f87-a961-cd0fbafba3fe" />
+<img width="959" height="1221" alt="image" src="https://github.com/user-attachments/assets/07a071b1-b9d2-45d2-8ca7-0ba53e6e9e8d" />
+<img width="815" height="1104" alt="image" src="https://github.com/user-attachments/assets/b8b66354-c3e0-43a1-8dbb-86eab107add0" />
+
+
+
+
+
+
 ---
 
 ## What I Learned
