@@ -91,7 +91,9 @@ sms-store   | [main] SMS Store listening on :8081
 sms-store   | [kafka] Consumer starting: topic=sms-events
 ```
 
-> MongoDB will continuously print checkpoint messages — that is completely normal, ignore them.
+> MongoDB will continuously print checkpoint messages which can flood the screen — that is completely normal, ignore them. If you can't find the above lines, scroll up or open a second terminal and run `docker ps` to confirm all 6 containers show as `Up`.
+
+> **Note:** You may also see this warning — `the attribute 'version' is obsolete` — safe to ignore. To remove it permanently, open `docker-compose.yml` and delete the first line `version: "3.9"`.
 
 ### Step 4 — Verify everything is running
 
@@ -110,7 +112,26 @@ Both should return `{"status":"UP"}`.
 > Invoke-WebRequest -Uri http://localhost:8081/health | Select-Object -ExpandProperty Content
 > ```
 
+Once both are healthy you have two options for the next steps:
+
+- **Quick path** — run `bash demo.sh` in your second terminal. It handles steps 5, 6, and 7 automatically with colored output showing the full end-to-end flow.
+- **Manual path** — continue through steps 5, 6, and 7 below to test each part yourself.
+
 ### Step 5 — Send your first SMS
+
+**Option A — Run the automated demo (does steps 5, 6, and 7 for you):**
+
+> ⚠️ `demo.sh` works on Mac, Linux, and Git Bash on Windows. It will **not** work in regular Windows PowerShell.
+
+```bash
+bash demo.sh
+```
+
+This script automatically sends SMS requests, blocks a user, checks history, and prints the results with colored output. If you just want to see the full flow working quickly, run this and skip to Step 8.
+
+---
+
+**Option B — Test manually:**
 
 **Mac / Linux / Git Bash:**
 ```bash
@@ -194,8 +215,23 @@ docker compose down -v
 | Port 8080 or 8081 already in use | Stop whatever is using that port, or change port mapping in `docker-compose.yml` |
 | SMS Sender can't connect to Kafka at startup | Kafka takes ~30 sec to be ready; Spring Boot retries automatically — just wait |
 | `curl` not working on Windows | Use `Invoke-WebRequest` as shown above, or install Git Bash |
-| `version` attribute warning in docker-compose | Safe to ignore — it is just an obsolete field warning |
-| MongoDB flooding logs with checkpoint messages | Normal behaviour — ignore it |
+| `version` attribute warning in docker-compose | Delete the `version: "3.9"` line from `docker-compose.yml` to remove it permanently |
+| MongoDB flooding logs with checkpoint messages | Normal behaviour — ignore it, or scroll up to find the service startup lines |
+| `demo.sh` not working on Windows | It only works on Mac, Linux, or Git Bash — not in regular PowerShell |
+| Something looks wrong but no obvious error | Isolate logs per service — see commands below |
+
+**Viewing logs for a specific service:**
+```bash
+docker compose logs sms-sender
+docker compose logs sms-store
+docker compose logs kafka
+docker compose logs mongodb
+```
+
+Add `-f` to follow logs in real time:
+```bash
+docker compose logs -f sms-sender
+```
 
 ---
 
@@ -286,27 +322,6 @@ docker exec redis redis-cli SREM blocked:users user-123
 # List all blocked users
 docker exec redis redis-cli SMEMBERS blocked:users
 ```
-
----
-
-## End-to-End Demo Script
-
-On Mac/Linux or Git Bash on Windows:
-
-```bash
-bash demo.sh
-```
-
-The script automatically:
-1. Checks health of both services
-2. Sends a successful SMS for `user-demo-001`
-3. Blocks `user-blocked-999` via Redis
-4. Attempts to send to the blocked user (receives `BLOCKED`)
-5. Sends a second SMS for `user-demo-001`
-6. Waits for Kafka consumer to store events
-7. Retrieves message history for `user-demo-001` from the SMS Store
-8. Retrieves history for the blocked user (the BLOCKED event is also stored)
-9. Unblocks the user
 
 ---
 
